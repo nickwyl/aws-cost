@@ -73,12 +73,13 @@ func main() {
 
 	//If -r flag is present, do a DFS postorder traversal and get cost of all accounts under OU
 	if *rPtr || *recursivePtr {
-		cost = DFS(&v4, org, ce, timePtr)
+		DFS(&v4, org, ce, timePtr, &cost)
 	} else {	//Else, get cost of only immediate accounts under OU
-		cost = getOUCost(&v4, org, ce, timePtr)
+		getOUCost(&v4, org, ce, timePtr, &cost)
 	}
 
 	fmt.Println("Recursive cost of OU:",cost)
+
 	//End time
 	endTime := time.Now()
 	fmt.Println("Time of program execution:",endTime.Sub(startTime))
@@ -86,7 +87,7 @@ func main() {
 
 
 //Get cost of accounts from current OU and child OUs
-func accountCost(accountID *string, ce *costexplorer.CostExplorer, timePtr *string) float64 {
+func accountCost(accountID *string, ce *costexplorer.CostExplorer, timePtr *string, cost *float64) {
 	//Values
 	start := strconv.Itoa(time.Now().Year()-1) + time.Now().Format("-01-") + "01"	//Starting from the 1st of the current month last year i.e. if today is 2020-06-29, then start date is 2019-06-01
 	end := time.Now().Format("2006-01-02")
@@ -125,23 +126,22 @@ func accountCost(accountID *string, ce *costexplorer.CostExplorer, timePtr *stri
 		exitErrorf("Unable to generate report, %v", err)
 	}
 
-	var totalCost float64 = 0
+	//var totalCost float64 = 0
 
 	//Loop through month-by-month cost to get total cost
 	for month := 0; month < len(result.ResultsByTime); month++ {
-		cost, err := strconv.ParseFloat(*result.ResultsByTime[month].Total["NetUnblendedCost"].Amount, 64)
+		currentCost, err := strconv.ParseFloat(*result.ResultsByTime[month].Total["NetUnblendedCost"].Amount, 64)
 		if err != nil {
 			exitErrorf("Unable to get cost,", err)
 		}
-		totalCost += cost
+		//totalCost += cost
+		*cost += currentCost
 	}
-
-	return totalCost
 }
 
 //Get cost of accounts from current OU
-func getOUCost(OU *organizations.OrganizationalUnit, org *organizations.Organizations, ce *costexplorer.CostExplorer, timePtr *string) float64 {
-	var cost float64 = 0
+func getOUCost(OU *organizations.OrganizationalUnit, org *organizations.Organizations, ce *costexplorer.CostExplorer, timePtr *string, cost *float64) {
+	//var cost float64 = 0
 	//Get accounts
 	accounts, err := org.ListAccountsForParent(&organizations.ListAccountsForParentInput{
 		ParentId:   OU.Id,
@@ -155,7 +155,7 @@ func getOUCost(OU *organizations.OrganizationalUnit, org *organizations.Organiza
 
 		////Increment costs of accounts
 		for i := 0; i < len(accounts.Accounts); i++ {
-			cost += accountCost(accounts.Accounts[i].Id, ce, timePtr)
+			accountCost(accounts.Accounts[i].Id, ce, timePtr, cost)
 		}
 
 		if accounts.NextToken == nil {
@@ -168,11 +168,10 @@ func getOUCost(OU *organizations.OrganizationalUnit, org *organizations.Organiza
 			NextToken: accounts.NextToken,
 		})
 	}
-	return cost
 }
 
-func DFS(OU *organizations.OrganizationalUnit, org *organizations.Organizations, ce *costexplorer.CostExplorer, timePtr *string) float64 {
-	var cost float64 = 0
+func DFS(OU *organizations.OrganizationalUnit, org *organizations.Organizations, ce *costexplorer.CostExplorer, timePtr *string, cost *float64) {
+	//var cost float64 = 0
 	var OUSlice []*organizations.OrganizationalUnit
 
 	//Get child OUs under parent OU
@@ -203,15 +202,14 @@ func DFS(OU *organizations.OrganizationalUnit, org *organizations.Organizations,
 
 	//Loop through all child OUs, get their costs, and store it to cost of current OU
 	for _,childOU := range OUSlice {
-		cost += DFS(childOU, org, ce, timePtr)
+		DFS(childOU, org, ce, timePtr, cost)
 	}
 
 	//Return cost of child OUs + cost of immediate accounts under current OU
-	return cost + getOUCost(OU, org, ce, timePtr)
+	getOUCost(OU, org, ce, timePtr, cost)
 }
 
 func exitErrorf(msg string, args ...interface{}) {
 	fmt.Fprintf(os.Stderr, msg+"\n", args...)
 	os.Exit(1)
 }
-
