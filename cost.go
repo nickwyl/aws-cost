@@ -55,9 +55,9 @@ func main() {
 
 	//Get v4 organizational unit
 	v4 := organizations.OrganizationalUnit{
-		Id:   aws.String("ou-0wd6-aff5ji37"),
+		//Id:   aws.String("ou-0wd6-aff5ji37"),
 		//Id:   aws.String("ou-0wd6-3321fxfw"), //Test small OU
-		//Id:   aws.String("ou-0wd6-k7wulboi"), //slightly larger small OU
+		Id:   aws.String("ou-0wd6-k7wulboi"), //slightly larger small OU
 		//Id:   aws.String("r-0wd6"), //Test root
 	}
 
@@ -213,4 +213,3 @@ func exitErrorf(msg string, args ...interface{}) {
 	fmt.Fprintf(os.Stderr, msg+"\n", args...)
 	os.Exit(1)
 }
-
