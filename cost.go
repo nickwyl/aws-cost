@@ -26,16 +26,16 @@ func main() {
 
 	}
 
-	// Create Cost Explorer Service Client
+	//Create Cost Explorer client
 	ce := costexplorer.New(sess)
-	//Accessing organizations
+	//Create Organizations client
 	org := organizations.New(sess)
 
 	//Get v4 organizational unit
 	v4 := organizations.OrganizationalUnit{
 		//Id:   aws.String("ou-0wd6-aff5ji37"), //v4
-		Id:   aws.String("ou-0wd6-3321fxfw"), //Test small OU
-		//Id:   aws.String("ou-0wd6-k7wulboi"), //slightly larger small OU
+		//Id:   aws.String("ou-0wd6-3321fxfw"), //Test small OU
+		Id:   aws.String("ou-0wd6-k7wulboi"), //slightly larger small OU
 		//Id:   aws.String("r-0wd6"), //Test root
 	}
 
@@ -110,17 +110,16 @@ func accountCost(accountID *string, ce *costexplorer.CostExplorer, timePtr *stri
 
 	//Loop through month-by-month cost and increment to get total cost
 	for month := 0; month < len(costs.ResultsByTime); month++ {
-		currentCost, err := strconv.ParseFloat(*costs.ResultsByTime[month].Total["NetUnblendedCost"].Amount, 64)
+		monthCost, err := strconv.ParseFloat(*costs.ResultsByTime[month].Total["NetUnblendedCost"].Amount, 64)
 		if err != nil {
 			log.Fatalln("Unable to get cost:",err)
 		}
-		*cost += currentCost
+		*cost += monthCost
 	}
 }
 
 //Get cost of accounts from current OU
 func getOUCost(OU *organizations.OrganizationalUnit, org *organizations.Organizations, ce *costexplorer.CostExplorer, timePtr *string, cost *float64) {
-	//var cost float64 = 0
 	//Get accounts
 	accounts, err := org.ListAccountsForParent(&organizations.ListAccountsForParentInput{
 		ParentId:   OU.Id,
