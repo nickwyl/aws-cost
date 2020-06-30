@@ -1,39 +1,16 @@
-// snippet-sourceauthor:[tokiwong]
-// snippet-sourcedescription:[Retrieves cost and usage metrics for your account]
-// snippet-keyword:[Amazon Cost Explorer]
-// snippet-keyword:[Amazon CE]
-// snippet-keyword:[GetCostAndUsage function]
-// snippet-keyword:[Go]
-// snippet-sourcesyntax:[go]
-// snippet-service:[ce]
-// snippet-keyword:[Code Sample]
-// snippet-sourcetype:[full-example]
-// snippet-sourcedate:[2019-07-09]
-/*
-   Copyright 2010-2019 Amazon.com, Inc. or its affiliates. All Rights Reserved.
-   This file is licensed under the Apache License, Version 2.0 (the "License").
-   You may not use this file except in compliance with the License. A copy of
-   the License is located at
-    http://aws.amazon.com/apache2.0/
-   This file is distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR
-   CONDITIONS OF ANY KIND, either express or implied. See the License for the
-   specific language governing permissions and limitations under the License.
-*/
-
 package main
 
 import (
+	"flag"
 	"fmt"
-	"os"
+	"log"
 	"strconv"
+	"time"
 
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/aws/session"
 	"github.com/aws/aws-sdk-go/service/costexplorer"
 	"github.com/aws/aws-sdk-go/service/organizations"
-
-	"flag"
-	"time"
 )
 
 func main() {
@@ -45,19 +22,20 @@ func main() {
 		Profile: "osd-staging-1",
 	})
 	if err != nil {
-		exitErrorf("Unable to generate session,", err)
+		log.Fatalln("Unable to generate session:",err)
+
 	}
 
-	// Create Cost Explorer Service Client
+	//Create Cost Explorer client
 	ce := costexplorer.New(sess)
-	//Accessing organizations
+	//Create Organizations client
 	org := organizations.New(sess)
 
 	//Get v4 organizational unit
 	v4 := organizations.OrganizationalUnit{
-		Id:   aws.String("ou-0wd6-aff5ji37"),
+		//Id:   aws.String("ou-0wd6-aff5ji37"), //v4
 		//Id:   aws.String("ou-0wd6-3321fxfw"), //Test small OU
-		//Id:   aws.String("ou-0wd6-k7wulboi"), //slightly larger small OU
+		Id:   aws.String("ou-0wd6-k7wulboi"), //slightly larger small OU
 		//Id:   aws.String("r-0wd6"), //Test root
 	}
 
@@ -88,7 +66,7 @@ func main() {
 
 //Get cost of accounts from current OU and child OUs
 func accountCost(accountID *string, ce *costexplorer.CostExplorer, timePtr *string, cost *float64) {
-	//Values
+
 	start := strconv.Itoa(time.Now().Year()-1) + time.Now().Format("-01-") + "01"	//Starting from the 1st of the current month last year i.e. if today is 2020-06-29, then start date is 2019-06-01
 	end := time.Now().Format("2006-01-02")
 	granularity := "MONTHLY"
@@ -103,10 +81,14 @@ func accountCost(accountID *string, ce *costexplorer.CostExplorer, timePtr *stri
 	case "YTD":
 		start = time.Now().Format("2006") + "-01-01"
 		end = time.Now().Format("2006-01-02")
+	case "TestError":
+		start = "2020-05-23"
+		end = "2019-06-12"
 	}
 
+
 	//Get cost information for chosen account
-	result, err := ce.GetCostAndUsage(&costexplorer.GetCostAndUsageInput{
+	costs, err := ce.GetCostAndUsage(&costexplorer.GetCostAndUsageInput{
 		Filter: &costexplorer.Expression{
 			Dimensions: &costexplorer.DimensionValues{
 				Key: aws.String("LINKED_ACCOUNT"),
@@ -123,25 +105,21 @@ func accountCost(accountID *string, ce *costexplorer.CostExplorer, timePtr *stri
 		Metrics: aws.StringSlice(metrics),
 	})
 	if err != nil {
-		exitErrorf("Unable to generate report, %v", err)
+		log.Fatalln("Error getting costs report:",err)
 	}
 
-	//var totalCost float64 = 0
-
-	//Loop through month-by-month cost to get total cost
-	for month := 0; month < len(result.ResultsByTime); month++ {
-		currentCost, err := strconv.ParseFloat(*result.ResultsByTime[month].Total["NetUnblendedCost"].Amount, 64)
+	//Loop through month-by-month cost and increment to get total cost
+	for month := 0; month < len(costs.ResultsByTime); month++ {
+		monthCost, err := strconv.ParseFloat(*costs.ResultsByTime[month].Total["NetUnblendedCost"].Amount, 64)
 		if err != nil {
-			exitErrorf("Unable to get cost,", err)
+			log.Fatalln("Unable to get cost:",err)
 		}
-		//totalCost += cost
-		*cost += currentCost
+		*cost += monthCost
 	}
 }
 
 //Get cost of accounts from current OU
 func getOUCost(OU *organizations.OrganizationalUnit, org *organizations.Organizations, ce *costexplorer.CostExplorer, timePtr *string, cost *float64) {
-	//var cost float64 = 0
 	//Get accounts
 	accounts, err := org.ListAccountsForParent(&organizations.ListAccountsForParentInput{
 		ParentId:   OU.Id,
@@ -150,7 +128,7 @@ func getOUCost(OU *organizations.OrganizationalUnit, org *organizations.Organiza
 	//Populate accountSlice with accounts by looping until accounts.NextToken is null
 	for {
 		if err != nil {	//Look at this for error handling: https://docs.aws.amazon.com/sdk-for-go/api/service/organizations/#example_Organizations_ListOrganizationalUnitsForParent_shared00
-			exitErrorf("Unable to retrieve accounts under OU", err)
+			log.Fatalln("Unable to retrieve accounts under OU:",err)
 		}
 
 		////Increment costs of accounts
@@ -182,7 +160,7 @@ func DFS(OU *organizations.OrganizationalUnit, org *organizations.Organizations,
 	//Populate OUSlice with OUs by looping until OUs.NextToken is null
 	for {
 		if err != nil {
-			exitErrorf("Unable to retrieve child OUs under OU", err)
+			log.Fatalln("Unable to retrieve child OUs under OU:",err)
 		}
 
 		//Add OUs to slice
@@ -208,9 +186,3 @@ func DFS(OU *organizations.OrganizationalUnit, org *organizations.Organizations,
 	//Return cost of child OUs + cost of immediate accounts under current OU
 	getOUCost(OU, org, ce, timePtr, cost)
 }
-
-func exitErrorf(msg string, args ...interface{}) {
-	fmt.Fprintf(os.Stderr, msg+"\n", args...)
-	os.Exit(1)
-}
-
