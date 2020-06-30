@@ -34,8 +34,8 @@ func main() {
 	//Get v4 organizational unit
 	v4 := organizations.OrganizationalUnit{
 		//Id:   aws.String("ou-0wd6-aff5ji37"), //v4
-		//Id:   aws.String("ou-0wd6-3321fxfw"), //Test small OU
-		Id:   aws.String("ou-0wd6-k7wulboi"), //slightly larger small OU
+		Id:   aws.String("ou-0wd6-3321fxfw"), //Test small OU
+		//Id:   aws.String("ou-0wd6-k7wulboi"), //slightly larger small OU
 		//Id:   aws.String("r-0wd6"), //Test root
 	}
 
@@ -46,11 +46,13 @@ func main() {
 	rPtr := flag.Bool("r", false, "recurse")
 	recursivePtr := flag.Bool("recursive", false, "recurse")
 	timePtr := flag.String("time", "all", "set time")
+	cc := flag.String("ccc", "", "create cost category")
 	//Parse pointers
 	flag.Parse()
 
-	//If -r flag is present, do a DFS postorder traversal and get cost of all accounts under OU
-	if *rPtr || *recursivePtr {
+	if *cc!="" {
+		createCostCategory(cc, &v4, org, ce, timePtr, &cost)
+	} else if *rPtr || *recursivePtr {		//If -r flag is present, do a DFS postorder traversal and get cost of all accounts under OU
 		DFS(&v4, org, ce, timePtr, &cost)
 	} else {	//Else, get cost of only immediate accounts under OU
 		getOUCost(&v4, org, ce, timePtr, &cost)
@@ -61,6 +63,28 @@ func main() {
 	//End time
 	endTime := time.Now()
 	fmt.Println("Time of program execution:",endTime.Sub(startTime))
+}
+
+
+func createCostCategory(id *string, OU *organizations.OrganizationalUnit, org *organizations.Organizations, ce *costexplorer.CostExplorer, timePtr *string, cost *float64) {
+	_, err := ce.CreateCostCategoryDefinition(&costexplorer.CreateCostCategoryDefinitionInput{
+		Name:        aws.String("ou-0wd6-3321fxfw"),
+		RuleVersion: aws.String("CostCategoryExpression.v1"),
+		Rules: []*costexplorer.CostCategoryRule{
+			{
+				Rule: &costexplorer.Expression{
+					Dimensions: &costexplorer.DimensionValues{
+						Key: aws.String("LINKED_ACCOUNT"),
+						Values: getAccountsIDs(OU, org),
+					},
+				},
+				Value: id,
+			},
+		},
+	})
+	if err != nil {
+		log.Fatalln("Error creating cost category:",err)
+	}
 }
 
 
@@ -85,7 +109,6 @@ func accountCost(accountID *string, ce *costexplorer.CostExplorer, timePtr *stri
 		start = "2020-05-23"
 		end = "2019-06-12"
 	}
-
 
 	//Get cost information for chosen account
 	costs, err := ce.GetCostAndUsage(&costexplorer.GetCostAndUsageInput{
@@ -118,8 +141,11 @@ func accountCost(accountID *string, ce *costexplorer.CostExplorer, timePtr *stri
 	}
 }
 
-//Get cost of accounts from current OU
-func getOUCost(OU *organizations.OrganizationalUnit, org *organizations.Organizations, ce *costexplorer.CostExplorer, timePtr *string, cost *float64) {
+
+func getAccountsIDs(OU *organizations.OrganizationalUnit, org *organizations.Organizations) []*string {
+	//accountSlice stores accounts
+	var accountSlice []*string
+
 	//Get accounts
 	accounts, err := org.ListAccountsForParent(&organizations.ListAccountsForParentInput{
 		ParentId:   OU.Id,
@@ -131,9 +157,8 @@ func getOUCost(OU *organizations.OrganizationalUnit, org *organizations.Organiza
 			log.Fatalln("Unable to retrieve accounts under OU:",err)
 		}
 
-		////Increment costs of accounts
 		for i := 0; i < len(accounts.Accounts); i++ {
-			accountCost(accounts.Accounts[i].Id, ce, timePtr, cost)
+			accountSlice = append(accountSlice, accounts.Accounts[i].Id)
 		}
 
 		if accounts.NextToken == nil {
@@ -146,10 +171,25 @@ func getOUCost(OU *organizations.OrganizationalUnit, org *organizations.Organiza
 			NextToken: accounts.NextToken,
 		})
 	}
+
+	return accountSlice
 }
 
-func DFS(OU *organizations.OrganizationalUnit, org *organizations.Organizations, ce *costexplorer.CostExplorer, timePtr *string, cost *float64) {
-	//var cost float64 = 0
+
+//Get cost of accounts from current OU
+func getOUCost(OU *organizations.OrganizationalUnit, org *organizations.Organizations, ce *costexplorer.CostExplorer, timePtr *string, cost *float64) {
+	//Populate accounts
+	accounts := getAccountsIDs(OU, org)
+
+	//Increment costs of accounts
+	for _,account := range accounts {
+		accountCost(account, ce, timePtr, cost)
+	}
+}
+
+
+func getOUs(OU *organizations.OrganizationalUnit, org *organizations.Organizations) []*organizations.OrganizationalUnit {
+	//OUSlice stores OUs
 	var OUSlice []*organizations.OrganizationalUnit
 
 	//Get child OUs under parent OU
@@ -178,8 +218,15 @@ func DFS(OU *organizations.OrganizationalUnit, org *organizations.Organizations,
 		})
 	}
 
+	return OUSlice
+}
+
+func DFS(OU *organizations.OrganizationalUnit, org *organizations.Organizations, ce *costexplorer.CostExplorer, timePtr *string, cost *float64) {
+	//Populate OUs
+	OUs := getOUs(OU, org)
+
 	//Loop through all child OUs, get their costs, and store it to cost of current OU
-	for _,childOU := range OUSlice {
+	for _,childOU := range OUs {
 		DFS(childOU, org, ce, timePtr, cost)
 	}
 
