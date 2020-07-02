@@ -33,8 +33,8 @@ func main() {
 
 	//Get organizational unit
 	OU := organizations.OrganizationalUnit{
-		Id:   aws.String("ou-0wd6-aff5ji37"), //v4
-		//Id:   aws.String("ou-0wd6-3321fxfw"), //Test small OU
+		//Id:   aws.String("ou-0wd6-aff5ji37"), //v4
+		Id:   aws.String("ou-0wd6-3321fxfw"), //Test small OU
 		//Id:   aws.String("ou-0wd6-k7wulboi"), //slightly larger small OU
 		//Id:   aws.String("r-0wd6"), //Test root
 		//Id:   aws.String("ou-0wd6-oq5d7v8g"), //Test for cost category
@@ -95,7 +95,7 @@ func createCostCategory(OUid *string, OU *organizations.OrganizationalUnit, org 
 
 
 //Get cost of immediate accounts under given OU
-func accountCost(accountID *string, ce *costexplorer.CostExplorer, timePtr *string, cost *float64) {
+func getAccountCost(accountID *string, ce *costexplorer.CostExplorer, timePtr *string, cost *float64) {
 
 	start := strconv.Itoa(time.Now().Year()-1) + time.Now().Format("-01-") + "01"	//Starting from the 1st of the current month last year i.e. if today is 2020-06-29, then start date is 2019-06-01
 	end := time.Now().Format("2006-01-02")
@@ -189,7 +189,7 @@ func getOUCost(OU *organizations.OrganizationalUnit, org *organizations.Organiza
 
 	//Increment costs of accounts
 	for _,account := range accounts {
-		accountCost(account, ce, timePtr, cost)
+		getAccountCost(account, ce, timePtr, cost)
 	}
 }
 
