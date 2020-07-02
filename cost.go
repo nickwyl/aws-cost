@@ -33,8 +33,8 @@ func main() {
 
 	//Get organizational unit
 	OU := organizations.OrganizationalUnit{
-		Id:   aws.String("ou-0wd6-aff5ji37"), //v4
-		//Id:   aws.String("ou-0wd6-3321fxfw"), //Test small OU
+		//Id:   aws.String("ou-0wd6-aff5ji37"), //v4
+		Id:   aws.String("ou-0wd6-3321fxfw"), //Test small OU
 		//Id:   aws.String("ou-0wd6-k7wulboi"), //slightly larger small OU
 		//Id:   aws.String("r-0wd6"), //Test root
 		//Id:   aws.String("ou-0wd6-oq5d7v8g"), //Test for cost category
@@ -50,6 +50,8 @@ func main() {
 	ccPtr := flag.String("ccc", "", "create cost category")
 	//Parse pointers
 	flag.Parse()
+
+	setEffectiveStartCostCategory(ce)
 
 	if *ccPtr!="" {
 		//Set OU to argument of flag -ccc.
@@ -69,12 +71,55 @@ func main() {
 	fmt.Println("Time of program execution:",endTime.Sub(startTime))
 }
 
+
+func setEffectiveStartCostCategory(ce *costexplorer.CostExplorer) {
+	output, err := ce.ListCostCategoryDefinitions(&costexplorer.ListCostCategoryDefinitionsInput{
+	})
+	if err != nil {
+		log.Fatalln("Cannot get cost category:", output)
+	}
+
+	//cc := costexplorer.CostCategory{
+	//	Name:            aws.String("ou-0wd6-aff5ji37"),
+	//}
+	//
+	//fmt.Println("This is cc:",cc.EffectiveStart)
+
+	var ccPtr *costexplorer.CostCategoryReference
+
+	for _, costcat := range output.CostCategoryReferences {
+		//fmt.Println("This is cost cat before change:",*costcat.Name,"this is date:",*costcat.EffectiveStart)
+		if *costcat.Name == "ou-0wd6-aff5ji37" {
+			//costcat.SetEffectiveStart("2019-07-01T00:00:00Z")
+			//fmt.Println("This is cost cat during change:",*costcat.Name,"this is date:",*costcat.EffectiveStart)
+			ccPtr = costcat
+		}
+		fmt.Println("This is cost cat after change:",*costcat.Name,"this is date:",*costcat.EffectiveStart)
+
+	}
+
+	ccPtr.SetEffectiveStart("2019-07-01T00:00:00Z")
+
+	fmt.Println("This is cost cat after change:",*ccPtr.CostCategoryArn,"this is date:",*ccPtr.EffectiveStart)
+
+
+	//res := costexplorer.UpdateCostCategoryDefinitionOutput{
+	//	CostCategoryArn: aws.String("arn:aws:ce::277304166082:costcategory/c92a0aff-8017-42a6-9eb7-2a96d0850db2"),
+	//	EffectiveStart:  aws.String("2019-07-01T00:00:00Z"),
+	//}
+	//
+	//fmt.Println("This is cost cat after change:",*ccPtr.CostCategoryArn,"this is date:",*ccPtr.EffectiveStart)
+	//fmt.Println("This is cost cat after change:",*res.CostCategoryArn,"this is date:",*res.EffectiveStart)
+
+}
+
 //Create Cost Category for OU given as argument for -ccc flag
 func createCostCategory(OUid *string, OU *organizations.OrganizationalUnit, org *organizations.Organizations, ce *costexplorer.CostExplorer) {
 	accounts := getOUAccountsRecursive(OU, org)
+	name := *OUid + " Effective Date Changed 2"
 
-	_, err := ce.CreateCostCategoryDefinition(&costexplorer.CreateCostCategoryDefinitionInput{
-		Name: OUid,
+	output, err := ce.CreateCostCategoryDefinition(&costexplorer.CreateCostCategoryDefinitionInput{
+		Name: &name,
 		RuleVersion: aws.String("CostCategoryExpression.v1"),
 		Rules: []*costexplorer.CostCategoryRule{
 			{
@@ -90,6 +135,14 @@ func createCostCategory(OUid *string, OU *organizations.OrganizationalUnit, org 
 	})
 	if err != nil {
 		log.Fatalln("Error creating cost category:",err)
+	}
+
+
+	//Change Cost Category's effective start date to a year prior to today's date
+	//output.SetEffectiveStart(strconv.Itoa(time.Now().Year()-1) + time.Now().Format("-01-") + "01")
+	_ = costexplorer.UpdateCostCategoryDefinitionOutput{
+		CostCategoryArn: output.CostCategoryArn,
+		EffectiveStart:  aws.String(strconv.Itoa(time.Now().Year()-1) + time.Now().Format("-01-") + "01T00:00:00Z"),
 	}
 }
 
