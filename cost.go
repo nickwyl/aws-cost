@@ -14,7 +14,7 @@ import (
 )
 
 func main() {
-	//measure time
+	//Measure time
 	startTime := time.Now()
 
 	//Initialize a session with the osd-staging-1 profile or any user that has access to the desired info
@@ -23,7 +23,6 @@ func main() {
 	})
 	if err != nil {
 		log.Fatalln("Unable to generate session:",err)
-
 	}
 
 	//Create Cost Explorer client
@@ -47,15 +46,18 @@ func main() {
 	rPtr := flag.Bool("r", false, "recurse")
 	recursivePtr := flag.Bool("recursive", false, "recurse")
 	timePtr := flag.String("time", "all", "set time")
-	ccPtr := flag.String("ccc", "", "create cost category")
+	cccPtr := flag.String("ccc", "", "create cost category")
+	reconciliatePtr := flag.Bool("reconciliate", false, "reconcile OUs")
 	//Parse pointers
 	flag.Parse()
 
-	if *ccPtr!="" {
+	if *cccPtr!="" {
 		//Set OU to argument of flag -ccc.
-		OU.Id = ccPtr
+		OU.Id = cccPtr
 		//Then, create cost category for given OU
-		createCostCategory(ccPtr, &OU, org, ce)
+		createCostCategory(cccPtr, &OU, org, ce)
+	} else if *reconciliatePtr {
+		reconciliateCostCategories(org, ce)
 	} else if *rPtr || *recursivePtr {		//If -r flag is present, do a DFS postorder traversal and get cost of all accounts under OU
 		getOUCostRecursive(&OU, org, ce, timePtr, &cost)
 	} else {	//Else, get cost of only immediate accounts under OU
@@ -67,6 +69,12 @@ func main() {
 	//End time
 	endTime := time.Now()
 	fmt.Println("Time of program execution:",endTime.Sub(startTime))
+}
+
+
+//Check if there's a cost category for every OU. If not, create the missing cost category. This should be ran every 24 hours
+func reconciliateCostCategories(org *organizations.Organizations, ce *costexplorer.CostExplorer) {
+	//Loop through every OU under root
 }
 
 //Create Cost Category for OU given as argument for -ccc flag
